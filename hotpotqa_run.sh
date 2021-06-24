@@ -55,7 +55,7 @@ preprocess() {
         echo "2. Paragraph ranking (2): longformer retrieval ranking scores"
         # switch to Longformer for final leaderboard, PYTORCH LIGHTING + '1.0.8' TRANSFORMER (3.3.1)
         # Output: long_para_ranking.json
-        python longformer_retrieval/0_lb_longformer_paragraph_ranking.py --data_dir $OUTPUT_PROCESSED --eval_ckpt $DATA_ROOT/models/finetuned/PS/longformer_pytorchlighting_model.ckpt --raw_data $INPUT_FILE --input_data $OUTPUT_PROCESSED/para_ir_combined.json
+        python longformer_retrieval/0_lb_longformer_paragraph_ranking.py --data_dir $OUTPUT_PROCESSED --eval_ckpt $DATA_ROOT/models/finetuned/HotPotQA_PS/longformer_pytorchlighting_model.ckpt --raw_data $INPUT_FILE --input_data $OUTPUT_PROCESSED/para_ir_combined.json
 
         echo "3. MultiHop Paragraph Selection (3)"
         # Input: $INPUT_FILE, doc_link_ner.json,  ner.json, long_para_ranking.json
