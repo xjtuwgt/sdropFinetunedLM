@@ -9,6 +9,16 @@ SELECTEED_DOC_NUM=4
 
 PROCS=${1:-"download"} # define the processes you want to run, e.g. "download,preprocess,train" or "preprocess" only
 
+# 0. Build Database from Wikipedia
+download() {
+    [[ -d $DATA_ROOT ]] || mkdir -p $DATA_ROOT/dataset/data_raw
+
+    wget -P $DATA_ROOT/dataset/data_raw/ http://curtis.ml.cmu.edu/datasets/hotpot/hotpot_train_v1.1.json
+    wget -P $DATA_ROOT/dataset/data_raw/ http://curtis.ml.cmu.edu/datasets/hotpot/hotpot_dev_distractor_v1.json
+    wget -P $DATA_ROOT/dataset/data_raw http://curtis.ml.cmu.edu/datasets/hotpot/hotpot_dev_fullwiki_v1.json
+    wget -P $DATA_ROOT/dataset/data_raw/ http://curtis.ml.cmu.edu/datasets/hotpot/hotpot_test_fullwiki_v1.json
+}
+
 # define precached BERT MODEL path
 # ROBERTA_LARGE=$DATA_ROOT/models/pretrained/roberta-large
 # pip install -U spacy
