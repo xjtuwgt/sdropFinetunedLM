@@ -3,7 +3,7 @@ import sys
 from pandas import DataFrame
 import pandas as pd
 from time import time
-from longformer_retrieval.lb_RetrievalOfflineProcess import Hotpot_Retrieval_Test_Data_PreProcess
+from longformer_retrieval.lb_RetrievalOfflineProcess import Hotpot_Retrieval_Train_Dev_Data_Preprocess
 from longformer_retrieval.lb_LongformerUtils import get_hotpotqa_longformer_tokenizer
 
 ########################################################################################################################
@@ -20,7 +20,5 @@ output_file = sys.argv[2]
 
 longformer_tokenizer = get_hotpotqa_longformer_tokenizer()
 data_frame = loadJSONDataAsDataFrame(json_fileName=input_file)
-print('Loading {} records from {}'.format(data_frame.shape, input_file))
-_, combined_data_res, _ = Hotpot_Retrieval_Test_Data_PreProcess(data=data_frame, tokenizer=longformer_tokenizer)
+_, combined_data_res, _ = Hotpot_Retrieval_Train_Dev_Data_Preprocess(data=data_frame, tokenizer=longformer_tokenizer)
 combined_data_res.to_json(output_file)
-print('Saving {} records into {}'.format(combined_data_res.shape, output_file))
