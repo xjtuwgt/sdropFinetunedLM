@@ -41,7 +41,7 @@ preprocess() {
 
         echo "Processing input_file: ${INPUT_FILE}"
 
-        INPUT_FILE=$INPUT_FILE
+        INPUT_FILE=$DATA_ROOT/dataset/data_raw/$INPUT_FILE
         OUTPUT_PROCESSED=$DATA_ROOT/dataset/data_processed/$DATA_TYPE
         OUTPUT_FEAT=$DATA_ROOT/dataset/data_feat/$DATA_TYPE
 
