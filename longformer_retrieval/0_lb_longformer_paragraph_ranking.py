@@ -88,7 +88,6 @@ def paragraph_retrieval_procedure(model, test_data_loader, args, device):
     example_ids = []
     doc_scores = []
     for output in out_puts:
-        print(output)
         example_ids += output['ids']
         doc_scores += output['doc_score']
     result_dict = {'e_id': example_ids,##for alignment
