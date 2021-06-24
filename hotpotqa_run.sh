@@ -60,7 +60,7 @@ preprocess() {
         echo "3. MultiHop Paragraph Selection (3)"
         # Input: $INPUT_FILE, doc_link_ner.json,  ner.json, long_para_ranking.json
         # Output: long_multihop_para.json
-        python longformer_retrieval/0_lb_longformer_multihop_ps.py $INPUT_FILE $OUTPUT_PROCESSED/doc_link_ner.json $OUTPUT_PROCESSED/ner.json $OUTPUT_PROCESSED/long_para_ranking.json $OUTPUT_PROCESSED/long_multihop_para.json $SELECTEED_DOC_NUM
+        python longformer_retrieval/0_lb_longformer_multihop_ps.py $INPUT_FILE $OUTPUT_PROCESSED/long_para_ranking.json $OUTPUT_PROCESSED/long_multihop_para.json $SELECTEED_DOC_NUM
 #
 #        echo "4. Dump features for electra do_lower_case"
 #        # Input: $INPUT_FILE, long_multihop_para.json; model_type, model_name, doc_link_ner.json, ner.json
