@@ -10,6 +10,6 @@
     "sent_lambda": 5,
     "learning_rate": 1e-5,
     "max_para_num": 4,
-    "max_sent_num": 100,
+    "max_sent_num": 40,
     "sent_drop_ratio": 0
 }
