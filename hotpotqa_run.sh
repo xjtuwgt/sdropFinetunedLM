@@ -64,7 +64,7 @@ preprocess() {
 
         echo "4. Dump features for electra do_lower_case"
         # Input: $INPUT_FILE, long_multihop_para.json; model_type, model_name, doc_link_ner.json, ner.json
-        python sd_mhqa/hotpotqa_dump_features.py  --para_path $OUTPUT_PROCESSED/long_multihop_para.json --full_data $INPUT_FILE --model_name_or_path $ELECTRA_ROOT/electra-base-discriminator --do_lower_case --ner_path $OUTPUT_PROCESSED/ner.json --model_type electra --tokenizer_name $ELECTRA_ROOT/electra-base-discriminator --output_dir $OUTPUT_FEAT --doc_link_ner $OUTPUT_PROCESSED/doc_link_ner.json --ranker long --data_type $DATA_TYPE --max_para_num $SELECTEED_DOC_NUM
+        python sd_mhqa/hotpotqa_dump_features.py --para_path $OUTPUT_PROCESSED/long_multihop_para.json --full_data $INPUT_FILE --model_name_or_path $ELECTRA_ROOT/electra-base-discriminator --do_lower_case --model_type electra --tokenizer_name $ELECTRA_ROOT/electra-base-discriminator --output_dir $OUTPUT_FEAT  --ranker long --data_type $DATA_TYPE
 
     done
 
