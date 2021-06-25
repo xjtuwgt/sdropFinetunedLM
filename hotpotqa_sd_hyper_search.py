@@ -1,4 +1,4 @@
-from hyperparametertuner.sentdrop_albert_randomsearch import generate_random_search_bash
+from hyperparatuner.sentdrop_randomsearch import generate_random_search_bash
 import argparse
 
 if __name__ == '__main__':

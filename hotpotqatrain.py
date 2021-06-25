@@ -8,11 +8,10 @@ from tqdm import tqdm, trange
 from tensorboardX import SummaryWriter
 
 from sd_mhqa.hotpotqa_argument_parser import default_train_parser, complete_default_train_parser, json_to_argv
-from sd_mhqa.hotpotqa_evalutils import get_lr_with_optimizer
-from csr_mhqa.utils import MODEL_CLASSES
-from sd_mhqa.hotpotqa_datahelper import DataHelper
-from sd_mhqa.hotpotqa_evalutils import jd_hotpotqa_eval_model
+from model_envs import MODEL_CLASSES
+from sd_mhqa.hotpotqa_data_helper import DataHelper
 from sd_mhqa.hotpotqa_model import UnifiedSDModel
+from sd_mhqa.hotpotqa_model_utils import jd_hotpotqa_eval_model
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S',
@@ -61,7 +60,6 @@ dev_dataloader = helper.hotpot_val_dataloader
 # #########################################################################
 # # Initialize Model
 # ##########################################################################
-# model = SDModel(config=args)
 model = UnifiedSDModel(config=args)
 model.to(args.device)
 # #########################################################################
@@ -72,22 +70,6 @@ if args.max_steps > 0:
     args.num_train_epochs = args.max_steps // (len(train_dataloader) // args.gradient_accumulation_steps) + 1
 else:
     t_total_steps = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
-#
-# optimizer = get_lr_with_optimizer(model=model, args=args)
-# if args.lr_scheduler == 'linear':
-#     scheduler = get_linear_schedule_with_warmup(optimizer,
-#                                             num_warmup_steps=args.warmup_steps,
-#                                             num_training_steps=t_total_steps)
-# elif args.lr_scheduler == 'cosine':
-#     scheduler = get_cosine_schedule_with_warmup(optimizer=optimizer,
-#                                                 num_warmup_steps=args.warmup_steps,
-#                                                 num_training_steps=t_total_steps)
-# elif args.lr_scheduler == 'cosine_restart':
-#     scheduler = get_cosine_with_hard_restarts_schedule_with_warmup(optimizer=optimizer,
-#                                                                    num_warmup_steps=args.warmup_steps,
-#                                                                    num_training_steps=t_total_steps)
-# else:
-#     raise '{} is not supported'.format(args.lr_scheduler)
 # ##########################################################################
 if args.optimizer == 'RecAdam':
     optimizer, scheduler = model.rec_adam_learning_optimizer(total_steps=t_total_steps)
@@ -134,22 +116,6 @@ logging.info('*' * 75)
 ##+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 start_epoch = 0
 best_joint_f1 = 0.0
-# if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-#     torch.save({k: v.cpu() for k, v in model.module.encoder.state_dict().items()},
-#                join(args.exp_name, f'encoder_test.pkl'))
-# else:
-#     torch.save({k: v.cpu() for k, v in model.encoder.state_dict().items()},
-#                join(args.exp_name, f'encoder_test.pkl'))
-# torch.save({k: v.cpu() for k, v in model.state_dict().items()},
-#                            join(args.exp_name, f'model_test.pkl'))
-#
-# print('saving test completed')
-# model_dict = torch.load(join(args.exp_name, f'model_test.pkl'))
-# print(model_dict)
-#
-# model.load_state_dict(model_dict)
-#
-# print('loading model testing completed')
 ##+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 train_iterator = trange(start_epoch, start_epoch+int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
 for epoch in train_iterator:
@@ -262,14 +228,6 @@ for epoch in train_iterator:
             for key, val in metrics.items():
                 logger.info("Current {} = {}".format(key, val))
             logger.info('*' * 100)
-        # if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-        #     torch.save({k: v.cpu() for k, v in model.module.encoder.state_dict().items()},
-        #                join(args.exp_name, f'encoder_{epoch + 1}.pkl'))
-        # else:
-        #     torch.save({k: v.cpu() for k, v in model.encoder.state_dict().items()},
-        #                join(args.exp_name, f'encoder_{epoch + 1}.pkl'))
-        # torch.save({k: v.cpu() for k, v in model.state_dict().items()},
-        #            join(args.exp_name, f'model_{epoch + 1}.pkl'))
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
             torch.save({k: v.cpu() for k, v in model.module.encoder.state_dict().items()},
                        join(args.exp_name, f'encoder_{epoch + 1}.pkl'))
