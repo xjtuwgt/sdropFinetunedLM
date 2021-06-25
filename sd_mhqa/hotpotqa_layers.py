@@ -67,8 +67,7 @@ class PredictionLayer(nn.Module):
     def __init__(self, config):
         super(PredictionLayer, self).__init__()
         self.config = config
-        # self.hidden = config.hidden_dim
-        self.hidden = config.transformer_hidden_dim
+        self.hidden = config.hidden_dim
 
         self.start_linear = OutputLayer(self.hidden, config, num_answer=1)
         self.end_linear = OutputLayer(self.hidden, config, num_answer=1)
