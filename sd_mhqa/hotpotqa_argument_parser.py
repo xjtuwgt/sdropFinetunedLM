@@ -56,11 +56,6 @@ def complete_default_train_parser(args):
         torch.distributed.init_process_group(backend="nccl")
         args.n_gpu = 1
     args.device = device
-
-    args.num_gnn_layers = int(args.gnn.split(':')[1].split(',')[0])
-    args.num_gnn_heads = int(args.gnn.split(':')[1].split(',')[1])
-    if len(args.mask_edge_types):
-        args.mask_edge_types = list(map(int, args.mask_edge_types.split(',')))
     args.max_doc_len = 512
     args.batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
     # TODO: only support albert-xxlarge-v2 now
