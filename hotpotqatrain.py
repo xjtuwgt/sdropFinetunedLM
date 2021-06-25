@@ -2,9 +2,6 @@ import logging
 import sys
 import torch
 import os
-
-from os.path import join
-from tqdm import tqdm, trange
 from tensorboardX import SummaryWriter
 
 from sd_mhqa.hotpotqa_argument_parser import default_train_parser, complete_default_train_parser, json_to_argv

@@ -1,5 +1,4 @@
 import os
-import logging
 import sys
 from os.path import join
 
