@@ -206,7 +206,6 @@ def default_train_parser():
     parser.add_argument("--max_entity_num", default=60, type=int)
     parser.add_argument("--max_ans_ent_num", default=15, type=int)
 
-    # bi attn
     parser.add_argument("--hidden_dim", type=int, default=300)
 
     # loss

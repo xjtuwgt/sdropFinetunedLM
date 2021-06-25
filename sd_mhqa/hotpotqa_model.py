@@ -14,8 +14,7 @@ class ReaderModel(nn.Module):
         super(ReaderModel, self).__init__()
         self.config = config
         self.input_dim = config.input_dim
-        self.hidden_dim = config.transformer_hidden_dim
-        self.head_num = config.transformer_head_num
+        self.hidden_dim = config.hidden_dim
         self.linear_map = nn.Linear(in_features=self.input_dim, out_features=self.hidden_dim, bias=False)
         self.para_sent_predict_layer = ParaSentPredictionLayer(self.config, hidden_dim=2 * self.hidden_dim)
         self.predict_layer = PredictionLayer(self.config)
