@@ -8,4 +8,4 @@ pip install pytorch-lightning==1.0.8
 pip install boto3
 
 spicy 0.16.0
-<!-- python lightningHGNPrediction.py --config_file configs/predict.roberta.lightning.long.json -->
+<!-- python -m torch.distributed.launch --nproc_per_node=4 hotpotqatrain.py --config_file configs/train.sentdrop.debug.json -->
