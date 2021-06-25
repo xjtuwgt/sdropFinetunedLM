@@ -122,6 +122,8 @@ output_eval_file = os.path.join(args.exp_name, f'eval.epoch.test.txt')
 metrics, threshold = jd_hotpotqa_eval_model(args, model,
                                             dev_dataloader, dev_example_dict,
                                             output_pred_file, output_eval_file, args.dev_gold_file)
+print(metrics)
+print(threshold)
 ##+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # train_iterator = trange(start_epoch, start_epoch+int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
 # for epoch in train_iterator:
