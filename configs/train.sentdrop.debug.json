@@ -7,7 +7,7 @@
     "gradient_accumulation_steps": 1,
     "ans_lambda": 1,
     "type_lambda":1,
-    "sent_lambda": 5,
+    "sent_lambda": 10,
     "learning_rate": 1e-5,
     "max_para_num": 4,
     "max_sent_num": 40,
