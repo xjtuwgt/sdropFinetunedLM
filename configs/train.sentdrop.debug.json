@@ -1,9 +1,9 @@
 {
-    "exp_name": "sr_electra_hotpotqa_debug_NEW",
+    "exp_name": "sr_electra_hotpotqa_debug_batch_4",
     "model_type": "electra",
     "num_train_epochs": 5,
     "encoder_name_or_path": "google/electra-base-discriminator",
-    "per_gpu_train_batch_size": 2,
+    "per_gpu_train_batch_size": 4,
     "gradient_accumulation_steps": 1,
     "ans_lambda": 1,
     "type_lambda":1,
