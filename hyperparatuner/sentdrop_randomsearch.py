@@ -47,7 +47,7 @@ def rand_search_parameter(space: dict):
 def HypeParameterSpace():
     learning_rate = {'name': 'learning_rate', 'type': 'choice', 'values': [3e-6, 2e-6, 1e-6, 1e-5]} #3e-5, 5e-5, 1e-4, 1.5e-4
     layer_wise_lr_decay = {'name': 'layer_wise_lr_decay', 'type': 'choice', 'values': [0.9]}
-    gradient_accumulation_steps = {'name': 'gradient_accumulation_steps', 'type': 'choice', 'values': [1,2,4]}
+    gradient_accumulation_steps = {'name': 'gradient_accumulation_steps', 'type': 'choice', 'values': [1,2]}
     sent_lambda = {'name': 'sent_lambda', 'type': 'choice', 'values': [20]} ##
     trans_drop = {'name': 'trans_drop', 'type': 'choice', 'values': [0.3]}
     num_train_epochs = {'name': 'num_train_epochs', 'type': 'choice', 'values': [5]}
@@ -57,7 +57,7 @@ def HypeParameterSpace():
     transformer_head_num = {'name': 'transformer_head_num', 'type': 'choice', 'values': [8]}
     sent_drop_ratio = {'name': 'sent_drop_ratio', 'type': 'choice', 'values': [0.1, 0.25]}
     drop_prob = {'name': 'drop_prob', 'type': 'choice', 'values': [0.15, 0.25]}
-    per_gpu_train_batch_size = {'name': 'per_gpu_train_batch_size', 'type': 'choice', 'values': [2]}
+    per_gpu_train_batch_size = {'name': 'per_gpu_train_batch_size', 'type': 'choice', 'values': [4]}
     model_type = {'name': 'model_type', 'type': 'choice', 'values': ['albert']}
     fine_tuned_encoder = {'name': 'fine_tuned_encoder', 'type': 'choice', 'values': ['google/electra-base-discriminator']} #'ahotrod/roberta_large_squad2'
     encoder_name_or_path = {'name': 'encoder_name_or_path', 'type': 'choice', 'values': ['electra']}
