@@ -1,5 +1,5 @@
 {
-    "exp_name": "sr_electra_hotpotqa_debug_batch_4",
+    "exp_name": "sr_electra_hotpotqa_debug_batch_4_sent_drop",
     "model_type": "electra",
     "num_train_epochs": 5,
     "encoder_name_or_path": "google/electra-base-discriminator",
