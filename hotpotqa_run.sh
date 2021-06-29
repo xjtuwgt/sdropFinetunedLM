@@ -15,8 +15,6 @@ download() {
 
     wget -P $DATA_ROOT/dataset/data_raw/ http://curtis.ml.cmu.edu/datasets/hotpot/hotpot_train_v1.1.json
     wget -P $DATA_ROOT/dataset/data_raw/ http://curtis.ml.cmu.edu/datasets/hotpot/hotpot_dev_distractor_v1.json
-#    wget -P $DATA_ROOT/dataset/data_raw http://curtis.ml.cmu.edu/datasets/hotpot/hotpot_dev_fullwiki_v1.json
-#    wget -P $DATA_ROOT/dataset/data_raw/ http://curtis.ml.cmu.edu/datasets/hotpot/hotpot_test_fullwiki_v1.json
 }
 
 # define precached BERT MODEL path
@@ -26,7 +24,6 @@ download() {
 
 # Add current pwd to PYTHONPATH
 export DIR_TMP="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-export PYTHONPATH=$PYTHONPATH:$DIR_TMP:$DIR_TMP/hgntransformers
 export PYTORCH_PRETRAINED_BERT_CACHE=$DATA_ROOT/models/pretrained_cache
 
 mkdir -p $DATA_ROOT/models/pretrained_cache
