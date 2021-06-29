@@ -11,6 +11,6 @@
     "learning_rate": 1e-5,
     "max_para_num": 4,
     "max_sent_num": 40,
-    "sent_drop_ratio": 0,
-    "drop_prob": 0
+    "sent_drop_ratio": 0.25,
+    "drop_prob": 0.25
 }
