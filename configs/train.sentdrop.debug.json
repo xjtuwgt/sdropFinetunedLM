@@ -1,5 +1,5 @@
 {
-    "exp_name": "sr_electra_hotpotqa_debug_batch_4_sent_drop",
+    "exp_name": "sr_electra_hotpotqa_debug_batch_4_sent_drop_0.5",
     "model_type": "electra",
     "num_train_epochs": 5,
     "encoder_name_or_path": "google/electra-base-discriminator",
@@ -12,5 +12,5 @@
     "max_para_num": 4,
     "max_sent_num": 40,
     "sent_drop_ratio": 0.25,
-    "drop_prob": 0.25
+    "drop_prob": 0.5
 }
