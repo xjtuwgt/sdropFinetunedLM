@@ -48,22 +48,19 @@ def HypeParameterSpace():
     learning_rate = {'name': 'learning_rate', 'type': 'choice', 'values': [3e-6, 2e-6, 1e-6, 1e-5]} #3e-5, 5e-5, 1e-4, 1.5e-4
     layer_wise_lr_decay = {'name': 'layer_wise_lr_decay', 'type': 'choice', 'values': [0.9]}
     gradient_accumulation_steps = {'name': 'gradient_accumulation_steps', 'type': 'choice', 'values': [1,2]}
-    sent_lambda = {'name': 'sent_lambda', 'type': 'choice', 'values': [20]} ##
-    trans_drop = {'name': 'trans_drop', 'type': 'choice', 'values': [0.3]}
-    num_train_epochs = {'name': 'num_train_epochs', 'type': 'choice', 'values': [10]}
-    devf_type = {'name': 'devf_type', 'type': 'choice', 'values': ['long_low']}
-    daug_type = {'name': 'daug_type', 'type': 'choice', 'values': ['long_low']} #
+    sent_lambda = {'name': 'sent_lambda', 'type': 'choice', 'values': [15]} ##
+    drop_prob = {'name': 'drop_prob', 'type': 'choice', 'values': [0.5]}
+    num_train_epochs = {'name': 'num_train_epochs', 'type': 'choice', 'values': [15]}
     sent_drop_ratio = {'name': 'sent_drop_ratio', 'type': 'choice', 'values': [0.1, 0.25]}
-    drop_prob = {'name': 'drop_prob', 'type': 'choice', 'values': [0.15, 0.25]}
     per_gpu_train_batch_size = {'name': 'per_gpu_train_batch_size', 'type': 'choice', 'values': [4]}
-    model_type = {'name': 'model_type', 'type': 'choice', 'values': ['albert']}
+    model_type = {'name': 'model_type', 'type': 'choice', 'values': ['electra']}
     fine_tuned_encoder = {'name': 'fine_tuned_encoder', 'type': 'choice', 'values': ['google/electra-base-discriminator']} #'ahotrod/roberta_large_squad2'
     encoder_name_or_path = {'name': 'encoder_name_or_path', 'type': 'choice', 'values': ['electra']}
     optimizer = {'name': 'optimizer', 'type': 'choice', 'values': ['Adam']} #RecAdam
     lr_scheduler = {'name': 'lr_scheduler', 'type': 'choice', 'values': ['cosine']}
     #++++++++++++++++++++++++++++++++++
     search_space = [learning_rate, per_gpu_train_batch_size, gradient_accumulation_steps, sent_lambda, layer_wise_lr_decay,
-                    lr_scheduler, fine_tuned_encoder, daug_type, devf_type,  optimizer, trans_drop, num_train_epochs, drop_prob,
+                    lr_scheduler, fine_tuned_encoder, optimizer, drop_prob, num_train_epochs,
                     model_type, encoder_name_or_path, sent_drop_ratio]
     search_space = dict((x['name'], x) for x in search_space)
     return search_space
@@ -87,7 +84,7 @@ def generate_random_search_bash(task_num, seed=42):
     search_space = HypeParameterSpace()
     for i in range(task_num):
         rand_hype_dict = single_task_trial(search_space, seed+i)
-        config_json_file_name = 'train.sent_drop.' + rand_hype_dict['model_type'] + '.data.' + rand_hype_dict['daug_type'] + 'sdr.' + str(rand_hype_dict['sent_drop_ratio']) \
+        config_json_file_name = 'train.sent_drop.' + rand_hype_dict['model_type'] + 'sdr.' + str(rand_hype_dict['sent_drop_ratio']) + 'dp.' + str(rand_hype_dict['drop_prob']) \
                                 +'.lr.'+ str(rand_hype_dict['learning_rate']) + rand_hype_dict['optimizer'] + '.' + rand_hype_dict['lr_scheduler']+ \
                                 '.seed' + str(rand_hype_dict['seed']) + '.json'
         with open(os.path.join(bash_save_path, config_json_file_name), 'w') as fp:
