@@ -50,11 +50,9 @@ def HypeParameterSpace():
     gradient_accumulation_steps = {'name': 'gradient_accumulation_steps', 'type': 'choice', 'values': [1,2]}
     sent_lambda = {'name': 'sent_lambda', 'type': 'choice', 'values': [20]} ##
     trans_drop = {'name': 'trans_drop', 'type': 'choice', 'values': [0.3]}
-    num_train_epochs = {'name': 'num_train_epochs', 'type': 'choice', 'values': [5]}
+    num_train_epochs = {'name': 'num_train_epochs', 'type': 'choice', 'values': [10]}
     devf_type = {'name': 'devf_type', 'type': 'choice', 'values': ['long_low']}
     daug_type = {'name': 'daug_type', 'type': 'choice', 'values': ['long_low']} #
-    transformer_hidden_dim = {'name': 'transformer_hidden_dim', 'type': 'choice', 'values': [512]}
-    transformer_head_num = {'name': 'transformer_head_num', 'type': 'choice', 'values': [8]}
     sent_drop_ratio = {'name': 'sent_drop_ratio', 'type': 'choice', 'values': [0.1, 0.25]}
     drop_prob = {'name': 'drop_prob', 'type': 'choice', 'values': [0.15, 0.25]}
     per_gpu_train_batch_size = {'name': 'per_gpu_train_batch_size', 'type': 'choice', 'values': [4]}
@@ -66,7 +64,7 @@ def HypeParameterSpace():
     #++++++++++++++++++++++++++++++++++
     search_space = [learning_rate, per_gpu_train_batch_size, gradient_accumulation_steps, sent_lambda, layer_wise_lr_decay,
                     lr_scheduler, fine_tuned_encoder, daug_type, devf_type,  optimizer, trans_drop, num_train_epochs, drop_prob,
-                    model_type, encoder_name_or_path, transformer_hidden_dim, transformer_head_num, sent_drop_ratio]
+                    model_type, encoder_name_or_path, sent_drop_ratio]
     search_space = dict((x['name'], x) for x in search_space)
     return search_space
 
