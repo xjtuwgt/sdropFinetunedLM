@@ -12,5 +12,5 @@
     "max_para_num": 4,
     "max_sent_num": 40,
     "sent_drop_ratio": 0.25,
-    "drop_prob": 0.5
+    "drop_prob": 0.75
 }
