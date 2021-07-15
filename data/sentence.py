@@ -5,3 +5,4 @@ from typing import Any, List
 class Sentence:
     sentence_idx: int
     token_ids: List[int]
+    marked_for_deletion: bool = False
