@@ -1,7 +1,9 @@
 from collections import defaultdict
 from copy import deepcopy
 import json
+import numpy as np
 import random
+import torch
 from torch.utils.data import Dataset, DataLoader
 from transformers import AutoTokenizer
 from typing import Iterable
@@ -106,26 +108,78 @@ def docred_sent_drop_postproc(example: DocREDExample):
 
     return example
 
-def docred_collate_fn(examples: Iterable[DocREDExample]):
-    # TODO: implement the actual collate function to put examples together into a batch of tensors
-    return examples
+def docred_collate_fn(examples: Iterable[DocREDExample], ner_vocab_size: int, relation_vocab_size: int):
+    # filter out examples where the head entity is no longer available
+    examples = list(filter(lambda ex: ex.head_entity in ex.entities, examples))
 
-class SentenceDropDataLoader(DataLoader):
+    if len(examples) == 0:
+        return
+
+    context_lens = [sum(len(s.token_ids) for s in ex.tokenized_sentences) for ex in examples]
+    max_ctx_len = max(context_lens)
+    entity_counts = [len(ex.entities) for ex in examples]
+    max_ent_count = max(entity_counts)
+
+    context = np.zeros((len(examples), max_ctx_len), dtype=np.int64)
+    entity_mask = np.zeros((len(examples), max_ent_count, max_ctx_len), dtype=np.uint8)
+
+    pairs = []
+
+    for ex_i, ex in enumerate(examples):
+        offset = 0
+        # assign each entity an index for quick reference later
+        for ent_i, ent in enumerate(ex.entities):
+            ent.idx = ent_i
+            
+        for sentence in ex.tokenized_sentences:
+            context[ex_i, offset:offset+len(sentence.token_ids)] = sentence.token_ids
+            for mention in sentence.mentions:
+                parent_idx = mention.parent.idx
+                entity_mask[ex_i, ent_i, offset+mention.start:offset+mention.end] = 1
+
+            offset += len(sentence.token_ids)
+    
+        ex_pairs = defaultdict(list)
+        for r in ex.relations:
+            ex_pairs[(r.head_entity.idx, r.tail_entity.idx)].append(r.relation)
+
+        pairs.append(ex_pairs)
+
+    max_pairs = max(len(p) for p in pairs)
+
+    entity_pairs = np.full((len(examples), max_pairs, 2), -1, dtype=np.int64)
+    pair_labels = np.zeros((len(examples), max_pairs, relation_vocab_size), dtype=np.int64)
+
+    for ex_i, ex in enumerate(examples):
+        for pair_i, pair in enumerate(pairs[ex_i]):
+            entity_pairs[ex_i, pair_i] = pair
+            for r in pairs[ex_i][pair]:
+                pair_labels[ex_i, pair_i, r] = 1
+
+    retval = {
+        'context': context,
+        'entity_mask': entity_mask,
+        'entity_pairs': entity_pairs, 
+        'pair_labels': pair_labels
+    }
+
+    retval = {k: torch.from_numpy(retval[k]) for k in retval}
+
+    return retval
+
+class SentenceDropDataset(Dataset):
     def __init__(self, 
+        dataset,
         *args,
         sent_drop_prob=0, 
         sent_keep_fn=lambda sentence: False,
         sent_drop_postproc=lambda example: example,
-        example_collate_fn=None,
+        example_validate_fn=lambda example: True,
         **kwargs
         ):
-
-        kwargs['collate_fn'] = self._collate_fn
-
         super().__init__(*args, **kwargs)
 
-        assert example_collate_fn is not None, "Must specify collate function (example_collate_fn) " \
-            "for SentenceDropDataLoader to accommodate data examples from different datasets."
+        self.dataset = dataset
 
         # probability a sentence is dropped
         self.sent_drop_prob = sent_drop_prob
@@ -134,8 +188,8 @@ class SentenceDropDataLoader(DataLoader):
         self.sent_keep_fn = sent_keep_fn
         # dataset-specific postprocessing for examples after sentence drop
         self.sent_drop_postproc = sent_drop_postproc
-        # collate function to convert a list of examples in a batch to pytorch tensors
-        self.example_collate_fn = example_collate_fn
+        # make sure examples are actually well-formed for training
+        self.example_validate_fn = example_validate_fn
 
     def _sentence_drop_on_example(self, example):
         new_ex = deepcopy(example)
@@ -150,16 +204,24 @@ class SentenceDropDataLoader(DataLoader):
 
         return new_ex
 
-    def _collate_fn(self, examples):
-        if self.sent_drop_prob > 0:
-            # perform sentence drop
-            examples = [self._sentence_drop_on_example(ex) for ex in examples]
-        
-        return self.example_collate_fn(examples)
+    def __getitem__(self, key):
+        # try different sentence drop patterns until we end up with at least a valid example
+        ex = self._sentence_drop_on_example(self.dataset[key])
+        while not self.example_validate_fn(ex):
+            ex = self._sentence_drop_on_example(self.dataset[key])
+        return ex
+
+    def __len__(self):
+        return len(self.dataset)
 
 if __name__ == "__main__":
-    d = DocREDDataset("/Users/peng.qi/Downloads/dev.json")
-    dl = SentenceDropDataLoader(d, batch_size=2, sent_drop_prob=.1, 
-        sent_drop_postproc=docred_sent_drop_postproc, example_collate_fn=docred_collate_fn)
-    for batch in dl:
+    dataset = DocREDDataset("/Users/peng.qi/Downloads/dev.json")
+    sdrop_dataset = SentenceDropDataset(dataset, sent_drop_prob=.1, 
+        sent_drop_postproc=docred_sent_drop_postproc, 
+        example_validate_fn=lambda ex: ex.head_entity in ex.entities)
+
+    from tqdm import tqdm
+    dataloader = DataLoader(sdrop_dataset, batch_size=2, 
+        collate_fn=lambda examples: docred_collate_fn(examples, ner_vocab_size=len(dataset.ner_to_idx), relation_vocab_size=len(dataset.relation_to_idx)))
+    for batch in tqdm(dataloader):
         pass
