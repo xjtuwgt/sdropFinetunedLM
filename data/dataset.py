@@ -103,45 +103,68 @@ def docred_sent_drop_postproc(example: DocREDExample):
     for entity in example.entities:
         entity.mentions = list(filter(lambda m: not m.marked_for_deletion, entity.mentions))
 
-    example.relations = list(filter(lambda r: len(r.head_entity.mentions) > 0 and len(r.tail_entity.mentions) > 0, example.relations))
+    example.relations = list(filter(lambda r: len(r.head_entity.mentions) > 0 and len(r.tail_entity.mentions) > 0 and not any(s.marked_for_deletion for s in r.evidence), example.relations))
     example.entities = list(filter(lambda e: len(e.mentions) > 0, example.entities))
 
     return example
 
-def docred_collate_fn(examples: Iterable[DocREDExample], ner_vocab_size: int, relation_vocab_size: int):
+def docred_collate_fn(examples: Iterable[DocREDExample], ner_vocab_size: int, relation_vocab_size: int, tokenizer: AutoTokenizer):
     # filter out examples where the head entity is no longer available
     examples = list(filter(lambda ex: ex.head_entity in ex.entities, examples))
 
     if len(examples) == 0:
         return
 
-    context_lens = [sum(len(s.token_ids) for s in ex.tokenized_sentences) for ex in examples]
+    # use the first mention of the head entity to guide the input
+    head_mentions = []
+    for ex in examples:
+        mention = ex.head_entity.mentions[0]
+        mention_text = mention.sentence.token_ids[mention.start:mention.end]
+        head_mentions.append(mention_text)
+
+    context_lens = [sum(len(s.token_ids) for s in ex.tokenized_sentences) + len(m) + 3 for ex, m in zip(examples, head_mentions)]
     max_ctx_len = max(context_lens)
     entity_counts = [len(ex.entities) for ex in examples]
     max_ent_count = max(entity_counts)
+    max_sentences = max(len(ex.tokenized_sentences) for ex in examples)
 
     context = np.zeros((len(examples), max_ctx_len), dtype=np.int64)
+    attention_mask = np.zeros((len(examples), max_ctx_len), dtype=np.uint8)
     entity_mask = np.zeros((len(examples), max_ent_count, max_ctx_len), dtype=np.uint8)
+    sentence_start = np.full((len(examples), max_sentences), -1, dtype=np.int64)
+    sentence_end = np.full((len(examples), max_sentences), -1, dtype=np.int64)
 
     pairs = []
 
-    for ex_i, ex in enumerate(examples):
-        offset = 0
+    CLS = tokenizer.bos_token_id if tokenizer.bos_token_id is not None else tokenizer.cls_token_id
+    SEP = tokenizer.eos_token_id if tokenizer.eos_token_id is not None else tokenizer.sep_token_id
+
+    for ex_i, (ex, head_mention) in enumerate(zip(examples, head_mentions)):
+        context[ex_i, 0] = CLS
+        context[ex_i, 1:1+len(head_mention)] = head_mention
+        context[ex_i, len(head_mention)+1] = SEP
+        offset = len(head_mention) + 2
+
         # assign each entity an index for quick reference later
         for ent_i, ent in enumerate(ex.entities):
             ent.idx = ent_i
             
-        for sentence in ex.tokenized_sentences:
+        for s_i, sentence in enumerate(ex.tokenized_sentences):
+            sentence_start[ex_i, s_i] = offset
+            sentence_end[ex_i, s_i] = offset + len(sentence.token_ids) - 1
             context[ex_i, offset:offset+len(sentence.token_ids)] = sentence.token_ids
             for mention in sentence.mentions:
                 parent_idx = mention.parent.idx
                 entity_mask[ex_i, ent_i, offset+mention.start:offset+mention.end] = 1
 
             offset += len(sentence.token_ids)
+
+        context[ex_i, offset] = SEP
+        attention_mask[ex_i, :offset+1] = 1
     
         ex_pairs = defaultdict(list)
         for r in ex.relations:
-            ex_pairs[(r.head_entity.idx, r.tail_entity.idx)].append(r.relation)
+            ex_pairs[(r.head_entity.idx, r.tail_entity.idx)].append((r.relation, r.evidence))
 
         pairs.append(ex_pairs)
 
@@ -149,18 +172,25 @@ def docred_collate_fn(examples: Iterable[DocREDExample], ner_vocab_size: int, re
 
     entity_pairs = np.full((len(examples), max_pairs, 2), -1, dtype=np.int64)
     pair_labels = np.zeros((len(examples), max_pairs, relation_vocab_size), dtype=np.int64)
+    pair_evidence = np.zeros((len(examples), max_pairs, relation_vocab_size, max_sentences), dtype=np.uint8)
 
     for ex_i, ex in enumerate(examples):
         for pair_i, pair in enumerate(pairs[ex_i]):
             entity_pairs[ex_i, pair_i] = pair
-            for r in pairs[ex_i][pair]:
+            for r, e in pairs[ex_i][pair]:
                 pair_labels[ex_i, pair_i, r] = 1
+                for sentence in e:
+                    pair_evidence[ex_i, pair_i, r, sentence.sentence_idx] = 1
 
     retval = {
         'context': context,
+        'attention_mask': attention_mask,
         'entity_mask': entity_mask,
+        'sentence_start': sentence_start,
+        'sentence_end': sentence_end,
         'entity_pairs': entity_pairs, 
-        'pair_labels': pair_labels
+        'pair_labels': pair_labels,
+        'pair_evidence': pair_evidence
     }
 
     retval = {k: torch.from_numpy(retval[k]) for k in retval}
@@ -201,6 +231,10 @@ class SentenceDropDataset(Dataset):
         new_ex = self.sent_drop_postproc(new_ex)
 
         new_ex.tokenized_sentences = list(filter(lambda sentence: not sentence.marked_for_deletion, new_ex.tokenized_sentences))
+        
+        # renumber sentences
+        for s_i, s in enumerate(new_ex.tokenized_sentences):
+            s.sentence_idx = s_i
 
         return new_ex
 
@@ -222,6 +256,6 @@ if __name__ == "__main__":
 
     from tqdm import tqdm
     dataloader = DataLoader(sdrop_dataset, batch_size=2, 
-        collate_fn=lambda examples: docred_collate_fn(examples, ner_vocab_size=len(dataset.ner_to_idx), relation_vocab_size=len(dataset.relation_to_idx)))
+        collate_fn=lambda examples: docred_collate_fn(examples, ner_vocab_size=len(dataset.ner_to_idx), relation_vocab_size=len(dataset.relation_to_idx), tokenizer=dataset.tokenizer))
     for batch in tqdm(dataloader):
         pass
