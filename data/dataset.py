@@ -3,8 +3,6 @@ import random
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer
 
-from example import DocREDExample, DocREDMention, DocREDEntity, DocREDRelation, DocREDSentence
-
 class TokenizedDataset(Dataset):
     def __init__(self, *args, tokenizer_class="bert-base-uncased", **kwargs):
         super().__init__(*args, **kwargs)

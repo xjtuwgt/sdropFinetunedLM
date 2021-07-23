@@ -1,9 +1,10 @@
 from collections import defaultdict
+from dataclasses import dataclass, field
 import json
 import numpy as np
 import torch
 from transformers import AutoTokenizer
-from typing import Iterable
+from typing import Iterable, List
 
 from dataset import TokenizedDataset, SentenceDropDataset
 from sentence import Sentence
