@@ -15,6 +15,21 @@ class FindCatSentence(Sentence):
 class FindCatExample(ExampleWithSentences):
     label : int = 0
 
+def contains_subsequence(target, sequence):
+    if len(target) == 0:
+        return True
+    
+    if target[0] not in sequence:
+        return False
+    else:
+        for i in range(len(sequence)-len(target)+1):
+            if sequence[i] == target[0]:
+                subresult = contains_subsequence(target[1:], sequence[i+1:])
+                if subresult:
+                    return True
+        return False
+
+
 class FindCatDataset(TokenizedDataset):
     def __init__(self, tokenizer_class="bert-base-uncased", 
         total_examples=1000, seqlen=300, vocab=list(range(26)), target=[ord(x)-ord('a') for x in 'cat'], fixed_positions=None, eval=False):
@@ -23,7 +38,6 @@ class FindCatDataset(TokenizedDataset):
         self.seqlen = seqlen
         self.vocab = vocab
         self.target = target
-        self.cat_pattern = re.compile('.*' + ''.join([f'{chr(char)}.*' for char in target]))
         self.fixed_positions = fixed_positions
         self.data = [self._generate_example() for _ in range(total_examples)]
 
@@ -32,7 +46,7 @@ class FindCatDataset(TokenizedDataset):
 
         if target == 0:
             retval = random.choices(self.vocab, k=self.seqlen)
-            while self.cat_pattern.match(''.join([chr(char) for char in retval])):
+            while contains_subsequence(self.target, retval):
                 retval = random.choices(self.vocab, k=self.seqlen)
         else:
             retval = random.choices(self.vocab, k=self.seqlen)
@@ -69,10 +83,13 @@ def find_cat_collate_fn(examples):
         'labels': batched_labels
     }
 
+def find_cat_validation_fn(ex, dataset):
+    return (ex.label == 0) or contains_subsequence(dataset.target, [s.token_ids[0] for s in ex.tokenized_sentences])
+
 if __name__ == "__main__":
     dataset = FindCatDataset()
-
-    sdrop_dataset = SentenceDropDataset(dataset, sent_drop_prob=.1)
+    sdrop_dataset = SentenceDropDataset(dataset, sent_drop_prob=.1, 
+        example_validate_fn=lambda ex: find_cat_validation_fn(ex, dataset=dataset))
 
     from tqdm import tqdm
     from torch.utils.data import DataLoader
