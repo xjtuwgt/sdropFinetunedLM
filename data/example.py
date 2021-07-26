@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import List
 
-from sentence import Sentence
+from .sentence import Sentence
 
 @dataclass
 class ExampleWithSentences:

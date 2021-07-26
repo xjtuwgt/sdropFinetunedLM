@@ -6,9 +6,9 @@ import torch
 from transformers import AutoTokenizer
 from typing import Iterable, List
 
-from dataset import TokenizedDataset, SentenceDropDataset
-from sentence import Sentence
-from example import ExampleWithSentences
+from .dataset import TokenizedDataset, SentenceDropDataset
+from .sentence import Sentence
+from .example import ExampleWithSentences
 
 @dataclass
 class DocREDMention:
