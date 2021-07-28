@@ -3,6 +3,7 @@ import numpy as np
 import random
 import re
 import torch
+from typing import List
 
 from .dataset import TokenizedDataset, SentenceDropDataset
 from .sentence import Sentence
@@ -14,6 +15,7 @@ class FindCatSentence(Sentence):
 
 @dataclass
 class FindCatExample(ExampleWithSentences):
+    target_tokens: List[int]
     label : int = 0
 
 def contains_subsequence(target, sequence):
@@ -31,15 +33,21 @@ def contains_subsequence(target, sequence):
         return False
 
 
+RESERVED_TOKENS = 10
+PAD = 0
+CLS = 1
+SEP = 2
+MASK = 3
+
 class FindCatDataset(TokenizedDataset):
     def __init__(self, tokenizer_class="bert-base-uncased", 
-        total_examples=1000, seqlen=300, vocab=list(range(1, 27)), target=[ord(x)-ord('a')+1 for x in 'cat'], 
+        total_examples=1000, seqlen=300, vocab=list(range(RESERVED_TOKENS, RESERVED_TOKENS+26)), target_tokens=[ord(x)-ord('a')+RESERVED_TOKENS for x in 'cat'], 
         fixed_positions=None, eval=False, seed=42):
         super().__init__(tokenizer_class=tokenizer_class)
 
         self.seqlen = seqlen
         self.vocab = vocab
-        self.target = target
+        self.target_tokens = target_tokens
         self.fixed_positions = fixed_positions
         random.seed(seed)
         self.data = [self._generate_example() for _ in range(total_examples)]
@@ -49,20 +57,20 @@ class FindCatDataset(TokenizedDataset):
 
         if target == 0:
             retval = random.choices(self.vocab, k=self.seqlen)
-            while contains_subsequence(self.target, retval):
+            while contains_subsequence(self.target_tokens, retval):
                 retval = random.choices(self.vocab, k=self.seqlen)
         else:
             retval = random.choices(self.vocab, k=self.seqlen)
             if self.fixed_positions is not None:
-                assert len(self.fixed_positions) == len(self.target)
+                assert len(self.fixed_positions) == len(self.target_tokens)
                 positions = self.fixed_positions
             else:
-                positions = sorted(random.choices(list(range(self.seqlen)), k=len(self.target)))
+                positions = sorted(random.choices(list(range(self.seqlen)), k=len(self.target_tokens)))
 
             for p_i, p in enumerate(positions):
-                retval[p] = self.target[p_i]
+                retval[p] = self.target_tokens[p_i]
         
-        return FindCatExample(tokenized_sentences=[FindCatSentence(sentence_idx=s_i, token_ids=[s]) for s_i, s in enumerate(retval)], label=target)
+        return FindCatExample(tokenized_sentences=[FindCatSentence(sentence_idx=s_i, token_ids=[s]) for s_i, s in enumerate(retval)], target_tokens=self.target_tokens, label=target)
 
     def __len__(self):
         return len(self.data)
@@ -71,14 +79,14 @@ class FindCatDataset(TokenizedDataset):
         return self.data[key]
 
 def find_cat_collate_fn(examples):
-    sent_lens = [len(ex.tokenized_sentences) for ex in examples]
-    max_sent_len = max(sent_lens)
+    ex_lens = [3 + len(ex.target_tokens) + len(ex.tokenized_sentences) for ex in examples]
+    max_ex_len = max(ex_lens)
 
-    batched_input = np.full((len(examples), max_sent_len), -1, dtype=np.int64)
+    batched_input = np.full((len(examples), max_ex_len), -1, dtype=np.int64)
     batched_labels = np.zeros((len(examples),), dtype=np.int64)
 
     for ex_i, ex in enumerate(examples):
-        batched_input[ex_i, :len(ex.tokenized_sentences)] = [s.token_ids[0] for s in ex.tokenized_sentences]
+        batched_input[ex_i, :ex_lens[ex_i]] = [CLS] + ex.target_tokens + [SEP] + [s.token_ids[0] for s in ex.tokenized_sentences] + [SEP]
         batched_labels[ex_i] = ex.label
 
     retval = {
@@ -90,8 +98,8 @@ def find_cat_collate_fn(examples):
 
     return retval
 
-def find_cat_validation_fn(ex, dataset):
-    return (ex.label == 0) or contains_subsequence(dataset.target, [s.token_ids[0] for s in ex.tokenized_sentences])
+def find_cat_validation_fn(ex):
+    return (ex.label == 0) or contains_subsequence(ex.target_tokens, [s.token_ids[0] for s in ex.tokenized_sentences])
 
 if __name__ == "__main__":
     dataset = FindCatDataset()
