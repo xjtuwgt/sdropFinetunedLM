@@ -1,12 +1,37 @@
 from argparse import ArgumentParser
+from collections import namedtuple
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import transformers
 
-from data.findcat import FindCatDataset, find_cat_validation_fn, find_cat_collate_fn
+from data.findcat import FindCatDataset, find_cat_validation_fn, find_cat_collate_fn, PAD
 from data.dataset import SentenceDropDataset
+
+BiLSTMClassifierOutput = namedtuple("BiLSTMClassifierOutput", ["loss", "logits"])
+
+class BiLSTMClassifier(nn.Module):
+    def __init__(self, num_layers, vocab_size, hidden_dim, dropout=0):
+        super().__init__()
+
+        self.embeddings = nn.Embedding(vocab_size, hidden_dim, padding_idx=PAD)
+
+        self.bilstm = nn.LSTM(hidden_dim, hidden_dim // 2, num_layers, bidirectional=True, 
+            dropout=dropout, batch_first=True)
+
+        self.classifier = nn.Linear(hidden_dim, 2)
+
+        self.crit = nn.CrossEntropyLoss()
+
+    def forward(self, input, labels, attention_mask=None):
+        emb = self.embeddings(input)
+        hid = self.bilstm(emb)[0]
+        first_hid = hid[:, 0]
+
+        logits = self.classifier(first_hid)
+        loss = self.crit(logits, labels)
+        return BiLSTMClassifierOutput(logits=logits, loss=loss)
 
 if __name__ == "__main__":
     parser = ArgumentParser()
@@ -16,32 +41,47 @@ if __name__ == "__main__":
     parser.add_argument('--test_examples', type=int, default=10000)
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--vocab_size', type=int, default=100)
-    parser.add_argument('--steps', type=int, default=1000)
-    parser.add_argument('--eval_every', type=int, default=10)
+    parser.add_argument('--steps', type=int, default=10000)
+    parser.add_argument('--eval_every', type=int, default=100)
 
+    parser.add_argument('--train_seqlen', type=int, default=300)
+    parser.add_argument('--test_seqlen', type=int, default=300)
     parser.add_argument('--validate_examples', action='store_true')
+    parser.add_argument('--beta_drop', action='store_true')
+    parser.add_argument('--beta_drop_scale', default=1, type=float)
 
     parser.add_argument('--seed', type=int, default=42)
 
-    parser.add_argument('--lr', type=float, default=1e-5)
+    parser.add_argument('--model_type', choices=['bert-like', 'bilstm'])
 
     args = parser.parse_args()
 
     torch.cuda.manual_seed_all(args.seed)
 
-    bert_config = transformers.AutoConfig.from_pretrained('bert-base-uncased')
-    bert_config.num_hidden_layers = 3
-    bert_config.vocab_size = args.vocab_size
+    if args.model_type == 'bert-like':
+        bert_config = transformers.AutoConfig.from_pretrained('bert-base-uncased')
+        bert_config.num_hidden_layers = 3
+        bert_config.vocab_size = args.vocab_size
 
-    model = transformers.AutoModelForSequenceClassification.from_config(bert_config)
+        model = transformers.AutoModelForSequenceClassification.from_config(bert_config)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5, weight_decay=1e-2)
+    elif args.model_type == 'bilstm':
+        model = BiLSTMClassifier(3, args.vocab_size, 512, dropout=0.1)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        
     model.cuda()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-2)
 
-    dataset = FindCatDataset(seed=args.seed, total_examples=args.train_examples)
-    dev_dataset = FindCatDataset(seed=314, total_examples=args.test_examples)
+    dataset = FindCatDataset(seed=args.seed, total_examples=args.train_examples, seqlen=args.train_seqlen)
+    dev_dataset = FindCatDataset(seed=314, total_examples=args.test_examples, seqlen=args.test_seqlen)
     validation_fn = find_cat_validation_fn if args.validate_examples else lambda ex: True
     sdrop_dataset = SentenceDropDataset(dataset, sent_drop_prob=args.sent_dropout,
-        example_validate_fn=validation_fn)
+        example_validate_fn=validation_fn, beta_drop=args.beta_drop, beta_drop_scale=args.beta_drop_scale)
+
+    if args.sent_dropout > 0:
+        failed, total = sdrop_dataset.estimate_label_noise(reps=10, validation_fn=find_cat_validation_fn)
+        print(f"Label noise: {failed / total * 100 :6.3f}% ({failed:7d} / {total:7d})", flush=True)
+    else:
+        print(f"Label noise: 0% (- / -)", flush=True)
 
     dataloader = DataLoader(sdrop_dataset, batch_size=args.batch_size, collate_fn=find_cat_collate_fn)
     dev_dataloader = DataLoader(dev_dataset, batch_size=args.batch_size, collate_fn=find_cat_collate_fn)
@@ -102,6 +142,8 @@ if __name__ == "__main__":
                 total = 0
                 correct = 0
                 total_loss = 0
+
+                model.train()
 
             if step >= args.steps:
                 break
