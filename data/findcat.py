@@ -1,5 +1,7 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import numpy as np
+import os
+import pickle
 import random
 import re
 import torch
@@ -42,7 +44,7 @@ MASK = 3
 class FindCatDataset(TokenizedDataset):
     def __init__(self, tokenizer_class="bert-base-uncased", 
         total_examples=1000, seqlen=300, vocab=list(range(RESERVED_TOKENS, RESERVED_TOKENS+26)), target_tokens=[ord(x)-ord('a')+RESERVED_TOKENS for x in 'cat'], 
-        fixed_positions=None, eval=False, seed=42):
+        fixed_positions=None, eval=False, seed=42, cache_dir="dataset/findcat"):
         super().__init__(tokenizer_class=tokenizer_class)
 
         self.seqlen = seqlen
@@ -50,7 +52,18 @@ class FindCatDataset(TokenizedDataset):
         self.target_tokens = target_tokens
         self.fixed_positions = fixed_positions
         random.seed(seed)
-        self.data = [self._generate_example() for _ in range(total_examples)]
+
+        if cache_dir is not None:
+            CACHE_FILE = f"{cache_dir}/findcat_total_{total_examples}_seqlen_{seqlen}_vocab_[{min(vocab)}-{max(vocab)}]_target_{repr(target_tokens)}_fixed_{repr(fixed_positions)}_seed_{seed}.pkl"
+            if os.path.exists(CACHE_FILE):
+                with open(CACHE_FILE, 'rb') as f:
+                    self.data = pickle.load(f)
+            else:
+                self.data = [self._generate_example() for _ in range(total_examples)]
+                with open(CACHE_FILE, 'wb') as f:
+                    pickle.dump(self.data, f)
+        else:
+            self.data = [self._generate_example() for _ in range(total_examples)]
 
     def _generate_example(self):
         target = int(random.random() > 0.5)
