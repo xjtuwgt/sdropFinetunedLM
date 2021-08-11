@@ -14,13 +14,13 @@ from data.dataset import SentenceDropDataset
 DocREDModelOutput = namedtuple("DocREDModelOutput", ["loss"])
 
 class TransformerModelForDocRED(nn.Module):
-    def __init__(self, model_type, rel_vocab_size, ner_vocab_size, ner_emb_dim=32):
+    def __init__(self, model_type, rel_vocab_size, ner_vocab_size):
         super().__init__()
 
         self.model = AutoModel.from_pretrained(model_type)
         self.hidden_size = self.model.config.hidden_size
 
-        self.ner_embedding = nn.Embedding(ner_vocab_size, ner_emb_dim)
+        self.ner_embedding = nn.Embedding(ner_vocab_size, self.hidden_size, padding_idx=0)
         self.rel_classifier = nn.Sequential(
             nn.Linear(self.hidden_size * 2, self.hidden_size * 2),
             nn.ReLU(),
@@ -31,8 +31,10 @@ class TransformerModelForDocRED(nn.Module):
         self.crit = nn.BCEWithLogitsLoss(reduction='none')
 
     def forward(self, batch):
-        # print({k: batch[k].size() for k in batch})
-        output = self.model(batch['context'], attention_mask=batch['attention_mask'])
+        print({k: batch[k].size() for k in batch})
+        inputs_embeds = self.model.get_input_embeddings()(batch['context'])
+        inputs_embeds += self.ner_embedding(batch['ner'])
+        output = self.model(inputs_embeds=inputs_embeds, attention_mask=batch['attention_mask'])
         hid = output.last_hidden_state
         ent_mask = batch['entity_mask'].float()
         ent_hid = ent_mask.bmm(hid) / (ent_mask.sum(2, keepdim=True) + 1e-6)
@@ -74,7 +76,7 @@ if __name__ == "__main__":
     torch.cuda.manual_seed_all(args.seed)
 
     dataset = DocREDDataset("dataset/docred/train_annotated.json", tokenizer_class=args.model_type)
-    dev_dataset = DocREDDataset("dataset/docred/dev.json", tokenizer_class=args.model_type)
+    dev_dataset = DocREDDataset("dataset/docred/dev.json", tokenizer_class=args.model_type, ner_to_idx=dataset.ner_to_idx, relation_to_idx=dataset.relation_to_idx)
 
     model = TransformerModelForDocRED(args.model_type, len(dataset.relation_to_idx), len(dataset.ner_to_idx))
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-2)
@@ -91,7 +93,7 @@ if __name__ == "__main__":
     else:
         print(f"Label noise: 0% (- / -)", flush=True)
 
-    collate_fn = lambda examples: docred_collate_fn(examples, ner_vocab_size=len(dataset.ner_to_idx), relation_vocab_size=len(dataset.relation_to_idx), tokenizer=dataset.tokenizer)
+    collate_fn = lambda examples: docred_collate_fn(examples, dataset=dataset)
     dataloader = DataLoader(sdrop_dataset, batch_size=args.batch_size, collate_fn=collate_fn)
     dev_dataloader = DataLoader(dev_dataset, batch_size=args.batch_size, collate_fn=collate_fn)
 

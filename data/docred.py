@@ -40,7 +40,7 @@ class DocREDExample(ExampleWithSentences):
     relations: List[DocREDRelation]
 
 class DocREDDataset(TokenizedDataset):
-    def __init__(self, json_file, tokenizer_class="bert-base-uncased", eval=False):
+    def __init__(self, json_file, tokenizer_class="bert-base-uncased", eval=False, ner_to_idx=None, relation_to_idx=None):
         super().__init__(tokenizer_class=tokenizer_class)
         with open(json_file) as f:
             data = json.load(f)
@@ -49,8 +49,18 @@ class DocREDDataset(TokenizedDataset):
         self.data = []
         self.relation_to_idx = {}
         self.idx_to_relation = []
-        self.ner_to_idx = {}
-        self.idx_to_ner = []
+        if relation_to_idx is not None:
+            self.relation_to_idx = relation_to_idx
+            self.idx_to_relation = [None] * len(relation_to_idx)
+            for k in relation_to_idx:
+                self.idx_to_relation[relation_to_idx[k]] = k
+        self.ner_to_idx = {"PAD": 0}
+        self.idx_to_ner = ["PAD"]
+        if ner_to_idx is not None:
+            self.ner_to_idx = ner_to_idx
+            self.idx_to_ner = [None] * len(ner_to_idx)
+            for k in ner_to_idx:
+                self.idx_to_ner[ner_to_idx[k]] = k
         for datum in data:
             sentences = datum['sents']
             # tokenize each word with the wordpiece tokenizer, so each sentence will become a list of lists of wordpiece ids
@@ -132,7 +142,7 @@ def docred_sent_drop_postproc(example: DocREDExample):
 
     return example
 
-def docred_collate_fn(examples: Iterable[DocREDExample], ner_vocab_size: int, relation_vocab_size: int, tokenizer: AutoTokenizer):
+def docred_collate_fn(examples: Iterable[DocREDExample], dataset: DocREDDataset):
     # filter out examples where the head entity is no longer available
     examples = list(filter(lambda ex: ex.head_entity in ex.entities, examples))
 
@@ -153,6 +163,7 @@ def docred_collate_fn(examples: Iterable[DocREDExample], ner_vocab_size: int, re
     max_sentences = max(len(ex.tokenized_sentences) for ex in examples)
 
     context = np.zeros((len(examples), max_ctx_len), dtype=np.int64)
+    ner = np.zeros((len(examples), max_ctx_len), dtype=np.int64)
     attention_mask = np.zeros((len(examples), max_ctx_len), dtype=np.uint8)
     entity_mask = np.zeros((len(examples), max_ent_count, max_ctx_len), dtype=np.uint8)
     sentence_start = np.full((len(examples), max_sentences), -1, dtype=np.int64)
@@ -160,6 +171,7 @@ def docred_collate_fn(examples: Iterable[DocREDExample], ner_vocab_size: int, re
 
     pairs = []
 
+    tokenizer = dataset.tokenizer
     CLS = tokenizer.bos_token_id if tokenizer.bos_token_id is not None else tokenizer.cls_token_id
     SEP = tokenizer.eos_token_id if tokenizer.eos_token_id is not None else tokenizer.sep_token_id
 
@@ -180,6 +192,7 @@ def docred_collate_fn(examples: Iterable[DocREDExample], ner_vocab_size: int, re
             for mention in sentence.mentions:
                 parent_idx = mention.parent.idx
                 entity_mask[ex_i, parent_idx, offset+mention.start:offset+mention.end] = 1
+                ner[ex_i, offset+mention.start:offset+mention.end] = mention.ner_type
 
             offset += len(sentence.token_ids)
 
@@ -195,8 +208,8 @@ def docred_collate_fn(examples: Iterable[DocREDExample], ner_vocab_size: int, re
     max_pairs = max(len(p) for p in pairs)
 
     entity_pairs = np.full((len(examples), max_pairs, 2), -1, dtype=np.int64)
-    pair_labels = np.zeros((len(examples), max_pairs, relation_vocab_size), dtype=np.int64)
-    pair_evidence = np.zeros((len(examples), max_pairs, relation_vocab_size, max_sentences), dtype=np.uint8)
+    pair_labels = np.zeros((len(examples), max_pairs, len(dataset.relation_to_idx)), dtype=np.int64)
+    pair_evidence = np.zeros((len(examples), max_pairs, len(dataset.relation_to_idx), max_sentences), dtype=np.uint8)
 
     for ex_i, ex in enumerate(examples):
         for pair_i, pair in enumerate(pairs[ex_i]):
@@ -214,7 +227,8 @@ def docred_collate_fn(examples: Iterable[DocREDExample], ner_vocab_size: int, re
         'sentence_end': sentence_end,
         'entity_pairs': entity_pairs, 
         'pair_labels': pair_labels,
-        'pair_evidence': pair_evidence
+        'pair_evidence': pair_evidence,
+        'ner': ner
     }
 
     retval = {k: torch.from_numpy(retval[k]) for k in retval}
@@ -234,6 +248,6 @@ if __name__ == "__main__":
     from torch.utils.data import DataLoader
 
     dataloader = DataLoader(sdrop_dataset, batch_size=2, 
-        collate_fn=lambda examples: docred_collate_fn(examples, ner_vocab_size=len(dataset.ner_to_idx), relation_vocab_size=len(dataset.relation_to_idx), tokenizer=dataset.tokenizer))
+        collate_fn=lambda examples: docred_collate_fn(examples, dataset=dataset))
     for batch in tqdm(dataloader):
         pass
