@@ -221,6 +221,9 @@ def docred_collate_fn(examples: Iterable[DocREDExample], ner_vocab_size: int, re
 
     return retval
 
+def docred_validate_fn(example):
+    return example.head_entity in example.entities
+
 if __name__ == "__main__":
     dataset = DocREDDataset("/Users/peng.qi/Downloads/dev.json")
     sdrop_dataset = SentenceDropDataset(dataset, sent_drop_prob=.1, 
