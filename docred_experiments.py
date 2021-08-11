@@ -11,23 +11,52 @@ from transformers import AutoModel
 from data.docred import DocREDDataset, docred_collate_fn, docred_validate_fn
 from data.dataset import SentenceDropDataset
 
+DocREDModelOutput = namedtuple("DocREDModelOutput", ["loss"])
+
 class TransformerModelForDocRED(nn.Module):
-    def __init__(self, model_type):
+    def __init__(self, model_type, rel_vocab_size, ner_vocab_size, ner_emb_dim=32):
         super().__init__()
 
         self.model = AutoModel.from_pretrained(model_type)
         self.hidden_size = self.model.config.hidden_size
 
+        self.ner_embedding = nn.Embedding(ner_vocab_size, ner_emb_dim)
+        self.rel_classifier = nn.Sequential(
+            nn.Linear(self.hidden_size * 2, self.hidden_size * 2),
+            nn.ReLU(),
+            nn.Dropout(.1),
+            nn.Linear(self.hidden_size * 2, rel_vocab_size)
+        )
+
+        self.crit = nn.BCEWithLogitsLoss(reduction='none')
+
+    def forward(self, batch):
+        # print({k: batch[k].size() for k in batch})
+        output = self.model(batch['context'], attention_mask=batch['attention_mask'])
+        hid = output.last_hidden_state
+        ent_mask = batch['entity_mask'].float()
+        ent_hid = ent_mask.bmm(hid) / (ent_mask.sum(2, keepdim=True) + 1e-6)
+        pairs = batch['entity_pairs'].clamp(min=0)
+        head_hid = ent_hid.gather(1, pairs[:, :, :1].repeat(1, 1, self.hidden_size))
+        tail_hid = ent_hid.gather(1, pairs[:, :, 1:].repeat(1, 1, self.hidden_size))
+
+        pair_logits = self.rel_classifier(torch.cat([head_hid, tail_hid], 2))
+        loss0 = self.crit(pair_logits, batch['pair_labels'].float())
+        loss = loss0.masked_select(pairs[:, :, :1] >= 0).mean()
+        
+        return DocREDModelOutput(loss=loss)
+
 if __name__ == "__main__":
     parser = ArgumentParser()
 
-    parser.add_argument('--sent_dropout', type=float, default=.1)
+    parser.add_argument('--span_dropout', type=float, default=.1)
     parser.add_argument('--train_examples', type=int, default=1000)
     parser.add_argument('--test_examples', type=int, default=10000)
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--vocab_size', type=int, default=100)
     parser.add_argument('--steps', type=int, default=10000)
     parser.add_argument('--eval_every', type=int, default=100)
+    parser.add_argument('--report_every', type=int, default=1)
 
     parser.add_argument('--train_seqlen', type=int, default=300)
     parser.add_argument('--test_seqlen', type=int, default=300)
@@ -44,26 +73,27 @@ if __name__ == "__main__":
 
     torch.cuda.manual_seed_all(args.seed)
 
-    model = TransformerModelForDocRED(args.model_type)
-    optimizer = nn.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-2)
+    dataset = DocREDDataset("dataset/docred/train_annotated.json", tokenizer_class=args.model_type)
+    dev_dataset = DocREDDataset("dataset/docred/dev.json", tokenizer_class=args.model_type)
 
-    model.cuda()
+    model = TransformerModelForDocRED(args.model_type, len(dataset.relation_to_idx), len(dataset.ner_to_idx))
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-2)
 
-    dataset = DocREDDataset("/Users/peng.qi/Downloads/train_annotated.json", tokenizer_class=args.model_type)
-    dev_dataset = DocREDDataset("/Users/peng.qi/Downloads/dev.json", tokenizer_class=args.model_type)
+    # model.cuda()
 
     validation_fn = docred_validate_fn if args.validate_examples else lambda ex: True
-    sdrop_dataset = SentenceDropDataset(dataset, sent_drop_prob=args.sent_dropout,
+    sdrop_dataset = SentenceDropDataset(dataset, sent_drop_prob=args.span_dropout,
         example_validate_fn=validation_fn, beta_drop=args.beta_drop, beta_drop_scale=args.beta_drop_scale)
 
-    if args.sent_dropout > 0:
-        failed, total = sdrop_dataset.estimate_label_noise(reps=10, validation_fn=docred_validate_fn)
+    if args.span_dropout > 0:
+        failed, total = sdrop_dataset.estimate_label_noise(reps=1, validation_fn=docred_validate_fn)
         print(f"Label noise: {failed / total * 100 :6.3f}% ({failed:7d} / {total:7d})", flush=True)
     else:
         print(f"Label noise: 0% (- / -)", flush=True)
 
-    dataloader = DataLoader(sdrop_dataset, batch_size=args.batch_size, collate_fn=docred_collate_fn)
-    dev_dataloader = DataLoader(dev_dataset, batch_size=args.batch_size, collate_fn=docred_collate_fn)
+    collate_fn = lambda examples: docred_collate_fn(examples, ner_vocab_size=len(dataset.ner_to_idx), relation_vocab_size=len(dataset.relation_to_idx), tokenizer=dataset.tokenizer)
+    dataloader = DataLoader(sdrop_dataset, batch_size=args.batch_size, collate_fn=collate_fn)
+    dev_dataloader = DataLoader(dev_dataset, batch_size=args.batch_size, collate_fn=collate_fn)
 
     step = 0
     best_dev_acc = -1
@@ -76,12 +106,9 @@ if __name__ == "__main__":
     while True:
         model.train()
         for batch in dataloader:
-            batch = {k: batch[k].cuda() for k in batch}
-            import pdb; pdb.set_trace()
+            # batch = {k: batch[k].cuda() for k in batch}
             step += 1
-            input = batch['input'].clamp(min=0)
-            attn_mask = (input >= 0)
-            output = model(input, attention_mask=attn_mask, labels=batch['labels'])
+            output = model(batch)
 
             total_loss += output.loss.item()
 
@@ -89,11 +116,9 @@ if __name__ == "__main__":
             output.loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
             optimizer.step()
-
-            pred = output.logits.max(1)[1]
-
-            total += len(pred)
-            correct += (pred == batch['labels']).sum()
+        
+            if step % args.report_every == 0:
+                print(f"Step {step}: loss={output.loss.item():6f}")
 
             if step % args.eval_every == 0:
                 print(f"Epoch {step}: train accuracy={correct / total:.6f}, train loss={total_loss / total}", flush=True)

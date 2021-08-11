@@ -179,7 +179,7 @@ def docred_collate_fn(examples: Iterable[DocREDExample], ner_vocab_size: int, re
             context[ex_i, offset:offset+len(sentence.token_ids)] = sentence.token_ids
             for mention in sentence.mentions:
                 parent_idx = mention.parent.idx
-                entity_mask[ex_i, ent_i, offset+mention.start:offset+mention.end] = 1
+                entity_mask[ex_i, parent_idx, offset+mention.start:offset+mention.end] = 1
 
             offset += len(sentence.token_ids)
 
