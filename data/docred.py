@@ -31,10 +31,11 @@ class DocREDRelation:
     head_entity: DocREDEntity
     tail_entity: DocREDEntity
     relation: int
-    evidence: List[Sentence]
+    evidence: List[DocREDSentence]
 
 @dataclass
 class DocREDExample(ExampleWithSentences):
+    doc_title: str
     head_entity: DocREDEntity
     entities: List[DocREDEntity]
     relations: List[DocREDRelation]
@@ -116,7 +117,7 @@ class DocREDDataset(TokenizedDataset):
                 head_to_examples[head].append(DocREDRelation(head_entity=entities[head], tail_entity=entities[tail], relation=relation, evidence=[sentences[si] for si in evidence]))
 
             for head in head_to_examples:
-                example = DocREDExample(sentences, entities[head], entities, head_to_examples[head])
+                example = DocREDExample(sentences, datum['title'], entities[head], entities, head_to_examples[head])
                 self.data.append(example)
 
     def __len__(self):
@@ -186,6 +187,7 @@ def docred_collate_fn(examples: Iterable[DocREDExample], dataset: DocREDDataset)
             ent.idx = ent_i
             
         for s_i, sentence in enumerate(ex.tokenized_sentences):
+            ex.tokenized_sentences[s_i].sentence_idx = s_i
             sentence_start[ex_i, s_i] = offset
             sentence_end[ex_i, s_i] = offset + len(sentence.token_ids) - 1
             context[ex_i, offset:offset+len(sentence.token_ids)] = sentence.token_ids
@@ -200,8 +202,15 @@ def docred_collate_fn(examples: Iterable[DocREDExample], dataset: DocREDDataset)
         attention_mask[ex_i, :offset+1] = 1
     
         ex_pairs = defaultdict(list)
+        positive_entities = set()
         for r in ex.relations:
             ex_pairs[(r.head_entity.idx, r.tail_entity.idx)].append((r.relation, r.evidence))
+            positive_entities.add(r.tail_entity.idx)
+
+        # add negative entity pairs
+        for ent in ex.entities:
+            if ent.idx not in positive_entities and ent.idx != ex.head_entity.idx:
+                ex_pairs[(ex.head_entity.idx, ent.idx)].append((-1, []))
 
         pairs.append(ex_pairs)
 
@@ -215,9 +224,10 @@ def docred_collate_fn(examples: Iterable[DocREDExample], dataset: DocREDDataset)
         for pair_i, pair in enumerate(pairs[ex_i]):
             entity_pairs[ex_i, pair_i] = pair
             for r, e in pairs[ex_i][pair]:
-                pair_labels[ex_i, pair_i, r] = 1
-                for sentence in e:
-                    pair_evidence[ex_i, pair_i, r, sentence.sentence_idx] = 1
+                if r >= 0:
+                    pair_labels[ex_i, pair_i, r] = 1
+                    for sentence in e:
+                        pair_evidence[ex_i, pair_i, r, sentence.sentence_idx] = 1
 
     retval = {
         'context': context,
@@ -228,10 +238,12 @@ def docred_collate_fn(examples: Iterable[DocREDExample], dataset: DocREDDataset)
         'entity_pairs': entity_pairs, 
         'pair_labels': pair_labels,
         'pair_evidence': pair_evidence,
-        'ner': ner
+        'ner': ner,
     }
 
     retval = {k: torch.from_numpy(retval[k]) for k in retval}
+
+    retval['doc_title'] = [ex.doc_title for ex in examples]
 
     return retval
 

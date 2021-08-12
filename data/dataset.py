@@ -56,8 +56,8 @@ class SentenceDropDataset(Dataset):
         new_ex.tokenized_sentences = list(filter(lambda sentence: not sentence.marked_for_deletion, new_ex.tokenized_sentences))
         
         # renumber sentences
-        for s_i, s in enumerate(new_ex.tokenized_sentences):
-            s.sentence_idx = s_i
+        for s_i in range(len(new_ex.tokenized_sentences)):
+            new_ex.tokenized_sentences[s_i].sentence_idx = s_i
 
         return new_ex
 
