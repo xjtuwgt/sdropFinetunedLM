@@ -36,6 +36,15 @@ def official_evaluate(tmp, path):
     '''
         Adapted from the official evaluation code
     '''
+
+    if len(tmp) == 0:
+        return {
+            "re_f1": 0,
+            "evi_f1": 0,
+            "re_f1_ignore_train_annotated": 0,
+            "re_f1_ignore_train": 0
+        }
+
     truth_dir = os.path.join(path, 'ref')
 
     if not os.path.exists(truth_dir):
@@ -143,8 +152,8 @@ def official_evaluate(tmp, path):
         re_f1_ignore_train = 2.0 * re_p_ignore_train * re_r / (re_p_ignore_train + re_r)
 
     return {
-        "re_f1": re_f1, 
-        "evi_f1": evi_f1, 
-        "re_f1_ignore_train_annotated": re_f1_ignore_train_annotated, 
+        "re_f1": re_f1,
+        "evi_f1": evi_f1,
+        "re_f1_ignore_train_annotated": re_f1_ignore_train_annotated,
         "re_f1_ignore_train": re_f1_ignore_train
     }

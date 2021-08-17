@@ -83,7 +83,7 @@ if __name__ == "__main__":
     else:
         print(f"Label noise: 0% (- / -)", flush=True)
 
-    dataloader = DataLoader(sdrop_dataset, batch_size=args.batch_size, collate_fn=find_cat_collate_fn)
+    dataloader = DataLoader(sdrop_dataset, batch_size=args.batch_size, collate_fn=find_cat_collate_fn, shuffle=True)
     dev_dataloader = DataLoader(dev_dataset, batch_size=args.batch_size, collate_fn=find_cat_collate_fn)
 
     step = 0

@@ -107,14 +107,18 @@ class DocREDDataset(TokenizedDataset):
                 entities.append(e1)
 
             head_to_examples = defaultdict(list)
+            if not eval:
+                for r in datum['labels']:
+                    head, tail, relation, evidence = r['h'], r['t'], r['r'], r['evidence']
+                    if relation not in self.relation_to_idx:
+                        self.relation_to_idx[relation] = len(self.relation_to_idx)
+                        self.idx_to_relation.append(relation)
+                    relation = self.relation_to_idx[relation]
+                    head_to_examples[head].append(DocREDRelation(head_entity=entities[head], tail_entity=entities[tail], relation=relation, evidence=[sentences[si] for si in evidence]))
 
-            for r in datum['labels']:
-                head, tail, relation, evidence = r['h'], r['t'], r['r'], r['evidence']
-                if relation not in self.relation_to_idx:
-                    self.relation_to_idx[relation] = len(self.relation_to_idx)
-                    self.idx_to_relation.append(relation)
-                relation = self.relation_to_idx[relation]
-                head_to_examples[head].append(DocREDRelation(head_entity=entities[head], tail_entity=entities[tail], relation=relation, evidence=[sentences[si] for si in evidence]))
+            for head in range(len(entities)):
+                if head not in head_to_examples:
+                    head_to_examples[head].extend([DocREDRelation(head_entity=entities[head], tail_entity=entities[tail], relation=-1, evidence=[]) for tail in range(len(entities)) if tail != head])
 
             for head in head_to_examples:
                 example = DocREDExample(sentences, datum['title'], entities[head], entities, head_to_examples[head])
@@ -203,6 +207,7 @@ def docred_collate_fn(examples: Iterable[DocREDExample], dataset: DocREDDataset)
     
         ex_pairs = defaultdict(list)
         positive_entities = set()
+
         for r in ex.relations:
             ex_pairs[(r.head_entity.idx, r.tail_entity.idx)].append((r.relation, r.evidence))
             positive_entities.add(r.tail_entity.idx)

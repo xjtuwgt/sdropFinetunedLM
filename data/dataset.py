@@ -39,6 +39,8 @@ class SentenceDropDataset(Dataset):
         self.beta_drop_scale = beta_drop_scale
 
     def _sentence_drop_on_example(self, example):
+        if self.sent_drop_prob == 0:
+            return example
         new_ex = deepcopy(example)
         if self.sent_drop_prob > 0 and self.beta_drop:
             a = max(1, self.sent_drop_prob / (1 - self.sent_drop_prob))
