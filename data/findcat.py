@@ -18,6 +18,7 @@ class FindCatSentence(Sentence):
 @dataclass
 class FindCatExample(ExampleWithSentences):
     target_tokens: List[int]
+    positions: List[int]
     label : int = 0
 
 def contains_subsequence(target, sequence):
@@ -90,7 +91,8 @@ class FindCatDataset(TokenizedDataset):
             for p_i, p in enumerate(positions):
                 retval[p] = target_tokens[p_i]
         
-        return FindCatExample(tokenized_sentences=[FindCatSentence(sentence_idx=s_i, token_ids=[s]) for s_i, s in enumerate(retval)], target_tokens=target_tokens, label=target)
+        return FindCatExample(tokenized_sentences=[FindCatSentence(sentence_idx=s_i, token_ids=[s]) for s_i, s in enumerate(retval)], 
+            target_tokens=target_tokens, positions=positions, label=target)
 
     def __len__(self):
         return len(self.data)
