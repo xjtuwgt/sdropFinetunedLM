@@ -52,7 +52,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--seed', type=int, default=42)
 
-    parser.add_argument('--model_type', choices=['bert-like', 'bilstm'])
+    parser.add_argument('--model_type', default='bert-like', choices=['bert-like', 'bilstm'])
 
     args = parser.parse_args()
 
@@ -117,7 +117,7 @@ if __name__ == "__main__":
             correct += (pred == batch['labels']).sum()
 
             if step % args.eval_every == 0:
-                print(f"Epoch {step}: train accuracy={correct / total:.6f}, train loss={total_loss / total}", flush=True)
+                print(f"Step {step}: train accuracy={correct / total:.6f}, train loss={total_loss / total}", flush=True)
 
                 model.eval()
                 total = 0
