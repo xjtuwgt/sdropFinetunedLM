@@ -81,6 +81,7 @@ class FindCatDataset(TokenizedDataset):
 
         retval = self._generate_negative_example(target_tokens) # start from a negative example that doesn't already contain the target subsequence
 
+        positions = []
         if target == 1:
             if self.fixed_positions is not None:
                 assert len(self.fixed_positions) == len(target_tokens)
