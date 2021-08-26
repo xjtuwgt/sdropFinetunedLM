@@ -1,5 +1,6 @@
 from argparse import ArgumentParser
 from collections import namedtuple
+import random
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -56,7 +57,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    torch.cuda.manual_seed_all(args.seed)
+    torch.manual_seed(args.seed)
 
     if args.model_type == 'bert-like':
         bert_config = transformers.AutoConfig.from_pretrained('bert-base-uncased')
@@ -74,6 +75,8 @@ if __name__ == "__main__":
     dataset = FindCatDataset(seed=args.seed, total_examples=args.train_examples, seqlen=args.train_seqlen)
     dev_dataset = FindCatDataset(seed=314, total_examples=args.test_examples, seqlen=args.test_seqlen)
     validation_fn = find_cat_validation_fn if args.validate_examples else lambda ex: True
+
+    random.seed(args.seed)
     sdrop_dataset = SentenceDropDataset(dataset, sent_drop_prob=args.sent_dropout,
         example_validate_fn=validation_fn, beta_drop=args.beta_drop, beta_drop_scale=args.beta_drop_scale)
 

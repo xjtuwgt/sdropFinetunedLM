@@ -25,16 +25,19 @@ def contains_subsequence(target, sequence):
     if len(target) == 0:
         return True
     
-    if target[0] not in sequence:
-        return False
-    else:
-        for i in range(len(sequence)-len(target)+1):
-            if sequence[i] == target[0]:
-                subresult = contains_subsequence(target[1:], sequence[i+1:])
-                if subresult:
-                    return True
-        return False
-
+    remaining = sequence
+    matched = 0
+    for t in target:
+        idx = 0
+        while idx < len(remaining) and remaining[idx] != t:
+            idx += 1
+        if idx >= len(remaining):
+            return False
+        else:
+            matched += 1
+            if matched == len(target):
+                return True
+            remaining = remaining[idx+1:]
 
 RESERVED_TOKENS = 10
 PAD = 0
@@ -55,7 +58,7 @@ class FindCatDataset(TokenizedDataset):
         random.seed(seed)
 
         if cache_dir is not None:
-            CACHE_FILE = f"{cache_dir}/findcat_total_{total_examples}_seqlen_{seqlen}_vocab_[{min(vocab)}-{max(vocab)}]_target_{repr(target_tokens)}_fixed_{repr(fixed_positions)}_seed_{seed}.pkl"
+            CACHE_FILE = f"{cache_dir}/findcat_total_{total_examples}_seqlen_{seqlen}_vocab_[{min(vocab)}-{max(vocab)}]_target_{repr(target_tokens)}_fixed_{repr(fixed_positions)}_seed_{seed}_v2.pkl"
             if os.path.exists(CACHE_FILE):
                 with open(CACHE_FILE, 'rb') as f:
                     self.data = pickle.load(f)
@@ -67,11 +70,43 @@ class FindCatDataset(TokenizedDataset):
             self.data = [self._generate_example() for _ in range(total_examples)]
 
     def _generate_negative_example(self, target_tokens):
+        V = len(self.vocab)
+        if not hasattr(self, 'pos_count_over_V_n'):
+            #                             total number of length-n sequences that don't contain a specific length-m subsequence
+            # pos_count_over_V_n[n, m] = ---------------------------------------------------------------------------------------
+            #                                                                     V^n
+            pos_count_over_V_n = np.zeros((self.seqlen+1, len(target_tokens)+1))
+            for n in range(1, self.seqlen+1):
+                for m in range(1, min(n+1, max(len(t) for t in self.target_tokens)+1)):
+                    if m == n:
+                        pos_count_over_V_n[n, m] = 1 - V ** (-n)
+                    elif m == 1:
+                        pos_count_over_V_n[n, m] = ((V - 1) / V) ** n
+                    else:
+                        pos_count_over_V_n[n, m] = (pos_count_over_V_n[n-1, m-1] + (V - 1) * pos_count_over_V_n[n-1, m]) / V
+
+            self.pos_count_over_V_n = pos_count_over_V_n
+
         retval = []
-        for _ in range(self.seqlen):
-            retval += [random.choice(self.vocab)]
-            while contains_subsequence(target_tokens, retval):
-                retval[-1] = random.choice(self.vocab)
+        matched = 0
+        for i in range(self.seqlen):
+            n = self.seqlen - i
+            m = len(target_tokens) - matched
+
+            if m > n:
+                # remaining target is shorter than remaining whole sequence
+                retval.append(random.choice(self.vocab))
+            else:
+                match_weight = self.pos_count_over_V_n[n-1, m-1]
+                unmatch_weight = self.pos_count_over_V_n[n-1, m]
+                p = np.full(V, unmatch_weight)
+                p[self.vocab.index(target_tokens[matched])] = match_weight
+                retval.extend(random.choices(self.vocab, weights=p))
+
+            if retval[-1] == target_tokens[matched]:
+                matched += 1
+
+        assert not contains_subsequence(target_tokens, retval)
 
         return retval
 
