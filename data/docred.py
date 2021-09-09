@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import defaultdict, Counter
 from dataclasses import dataclass, field
 import json
 import numpy as np
@@ -24,6 +24,7 @@ class DocREDSentence(Sentence):
 
 @dataclass
 class DocREDEntity:
+    name: List[int]
     mentions: List[DocREDMention]
 
 @dataclass
@@ -55,6 +56,12 @@ class DocREDDataset(TokenizedDataset):
             self.idx_to_relation = [None] * len(relation_to_idx)
             for k in relation_to_idx:
                 self.idx_to_relation[relation_to_idx[k]] = k
+        else:
+            rel_count = Counter([y['r'] for x in data for y in x['labels']])
+            self.idx_to_relation = list(rel_count.keys())
+            for i, r in enumerate(self.idx_to_relation):
+                self.relation_to_idx[r] = i
+
         self.ner_to_idx = {"PAD": 0}
         self.idx_to_ner = ["PAD"]
         if ner_to_idx is not None:
@@ -76,7 +83,7 @@ class DocREDDataset(TokenizedDataset):
                     subword_offset += len(subw)
                     s1.extend(subw)
                 tokenized_sentences[s_i] = s1
-                
+            
             sentences = [DocREDSentence(sentence_idx=sent_id, token_ids=sent) for sent_id, sent in enumerate(tokenized_sentences)]
             
             # map mention offsets to wordpiece tokenization
@@ -100,7 +107,7 @@ class DocREDDataset(TokenizedDataset):
                     m1 = DocREDMention(sentence=sentences[sent_id], start=st, end=en, ner_type=m1['type'])
                     sentences[sent_id].mentions.append(m1)
                     mentions.append(m1)
-                e1 = DocREDEntity(mentions=mentions)
+                e1 = DocREDEntity(name=self.tokenizer(entity[0]['name'], add_special_tokens=False)['input_ids'], mentions=mentions)
                 # add backpointers from mentions to entities for convenience
                 for m1 in mentions:
                     m1.parent = e1
@@ -111,8 +118,7 @@ class DocREDDataset(TokenizedDataset):
                 for r in datum['labels']:
                     head, tail, relation, evidence = r['h'], r['t'], r['r'], r['evidence']
                     if relation not in self.relation_to_idx:
-                        self.relation_to_idx[relation] = len(self.relation_to_idx)
-                        self.idx_to_relation.append(relation)
+                        continue
                     relation = self.relation_to_idx[relation]
                     head_to_examples[head].append(DocREDRelation(head_entity=entities[head], tail_entity=entities[tail], relation=relation, evidence=[sentences[si] for si in evidence]))
 
@@ -154,25 +160,18 @@ def docred_collate_fn(examples: Iterable[DocREDExample], dataset: DocREDDataset)
     if len(examples) == 0:
         return
 
-    # use the first mention of the head entity to guide the input
-    head_mentions = []
-    for ex in examples:
-        mention = ex.head_entity.mentions[0]
-        mention_text = mention.sentence.token_ids[mention.start:mention.end]
-        head_mentions.append(mention_text)
-
-    context_lens = [sum(len(s.token_ids) for s in ex.tokenized_sentences) + len(m) + 3 for ex, m in zip(examples, head_mentions)]
+    context_lens = [sum(len(s.token_ids) for s in ex.tokenized_sentences) + len(ex.head_entity.name) + 3 for ex in examples]
     max_ctx_len = max(context_lens)
     entity_counts = [len(ex.entities) for ex in examples]
     max_ent_count = max(entity_counts)
+    max_mention_count = max([len(entity.mentions) for ex in examples for entity in ex.entities])
     max_sentences = max(len(ex.tokenized_sentences) for ex in examples)
 
     context = np.zeros((len(examples), max_ctx_len), dtype=np.int64)
     ner = np.zeros((len(examples), max_ctx_len), dtype=np.int64)
     attention_mask = np.zeros((len(examples), max_ctx_len), dtype=np.uint8)
-    entity_mask = np.zeros((len(examples), max_ent_count, max_ctx_len), dtype=np.uint8)
-    sentence_start = np.full((len(examples), max_sentences), -1, dtype=np.int64)
-    sentence_end = np.full((len(examples), max_sentences), -1, dtype=np.int64)
+    entity_start = np.full((len(examples), max_ent_count, max_mention_count), -1, dtype=np.int64)
+    sentence_mask = np.zeros((len(examples), max_sentences, max_ctx_len), dtype=np.uint8)
 
     pairs = []
 
@@ -180,8 +179,9 @@ def docred_collate_fn(examples: Iterable[DocREDExample], dataset: DocREDDataset)
     CLS = tokenizer.bos_token_id if tokenizer.bos_token_id is not None else tokenizer.cls_token_id
     SEP = tokenizer.eos_token_id if tokenizer.eos_token_id is not None else tokenizer.sep_token_id
 
-    for ex_i, (ex, head_mention) in enumerate(zip(examples, head_mentions)):
+    for ex_i, ex in enumerate(examples):
         context[ex_i, 0] = CLS
+        head_mention = ex.head_entity.name
         context[ex_i, 1:1+len(head_mention)] = head_mention
         context[ex_i, len(head_mention)+1] = SEP
         offset = len(head_mention) + 2
@@ -192,12 +192,16 @@ def docred_collate_fn(examples: Iterable[DocREDExample], dataset: DocREDDataset)
             
         for s_i, sentence in enumerate(ex.tokenized_sentences):
             ex.tokenized_sentences[s_i].sentence_idx = s_i
-            sentence_start[ex_i, s_i] = offset
-            sentence_end[ex_i, s_i] = offset + len(sentence.token_ids) - 1
+            sentence_mask[ex_i, s_i, offset:offset+len(sentence.token_ids)] = 1
+            # sentence_start_end[ex_i, s_i, 0] = offset
+            # sentence_start_end[ex_i, s_i, 1] = offset + len(sentence.token_ids) - 1
             context[ex_i, offset:offset+len(sentence.token_ids)] = sentence.token_ids
             for mention in sentence.mentions:
                 parent_idx = mention.parent.idx
-                entity_mask[ex_i, parent_idx, offset+mention.start:offset+mention.end] = 1
+                m_i = 0
+                while entity_start[ex_i, parent_idx, m_i] >= 0:
+                    m_i += 1
+                entity_start[ex_i, parent_idx, m_i] = offset + mention.start
                 ner[ex_i, offset+mention.start:offset+mention.end] = mention.ner_type
 
             offset += len(sentence.token_ids)
@@ -237,9 +241,9 @@ def docred_collate_fn(examples: Iterable[DocREDExample], dataset: DocREDDataset)
     retval = {
         'context': context,
         'attention_mask': attention_mask,
-        'entity_mask': entity_mask,
-        'sentence_start': sentence_start,
-        'sentence_end': sentence_end,
+        'entity_start': entity_start,
+        # 'sentence_start_end': sentence_start_end,
+        'sentence_mask': sentence_mask,
         'entity_pairs': entity_pairs, 
         'pair_labels': pair_labels,
         'pair_evidence': pair_evidence,

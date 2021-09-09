@@ -9,6 +9,56 @@ class TokenizedDataset(Dataset):
         super().__init__(*args, **kwargs)
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_class)
 
+class SpanChunkDataset(Dataset):
+    def __init__(self, dataset, span_type, *args, chunk_size=1, chunking_fn=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.dataset = dataset
+        self.span_type = span_type
+        self.chunk_size = chunk_size
+        self.chunking_fn = chunking_fn
+
+    def _chunk_spans(self, spans):
+        res = []
+        cur = []
+        for s in spans:
+            cur.append(s)
+            if len(cur) >= self.chunk_size:
+                res.append(cur)
+                cur = []
+
+        if len(cur) > 0:
+            res.append(cur)
+
+        return res
+
+    def _naive_chunking_fn(self, ex, chunked_spans):
+        # just construct new spans by concatenating tokenized spans in each chunk
+
+        new_spans = []
+        for s_i, chunk in enumerate(chunked_spans):
+            toks = []
+            for s in chunk:
+                toks.extend(s.token_ids)
+            new_spans.append(self.span_type(sentence_idx=s_i, token_ids=toks))
+
+        new_ex = deepcopy(ex)
+        new_ex.tokenized_sentences = new_spans
+        return new_ex        
+
+    def __getitem__(self, key):
+        ex = self.dataset[key]
+
+        if self.chunk_size == 1:
+            return ex
+
+        chunking_fn = self.chunking_fn if self.chunking_fn is not None else lambda ex, chunks: self._naive_chunking_fn(ex, chunks)
+
+        return chunking_fn(ex, self._chunk_spans(ex.tokenized_sentences))
+
+    def __len__(self):
+        return len(self.dataset)
+
 class SentenceDropDataset(Dataset):
     def __init__(self, 
         dataset,

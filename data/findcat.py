@@ -137,7 +137,7 @@ class FindCatDataset(TokenizedDataset):
         return self.data[key]
 
 def find_cat_collate_fn(examples):
-    ex_lens = [3 + len(ex.target_tokens) + len(ex.tokenized_sentences) for ex in examples]
+    ex_lens = [3 + len(ex.target_tokens) + sum(len(s.token_ids) for s in ex.tokenized_sentences) for ex in examples]
     max_ex_len = max(ex_lens)
 
     batched_input = np.full((len(examples), max_ex_len), -1, dtype=np.int64)

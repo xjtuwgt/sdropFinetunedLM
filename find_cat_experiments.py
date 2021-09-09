@@ -1,5 +1,6 @@
 from argparse import ArgumentParser
 from collections import namedtuple
+import numpy as np
 import random
 import torch
 import torch.nn as nn
@@ -7,8 +8,8 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 import transformers
 
-from data.findcat import FindCatDataset, find_cat_validation_fn, find_cat_collate_fn, PAD
-from data.dataset import SentenceDropDataset
+from data.findcat import FindCatDataset, find_cat_validation_fn, find_cat_collate_fn, PAD, FindCatSentence
+from data.dataset import SentenceDropDataset, SpanChunkDataset
 
 BiLSTMClassifierOutput = namedtuple("BiLSTMClassifierOutput", ["loss", "logits"])
 
@@ -27,7 +28,9 @@ class BiLSTMClassifier(nn.Module):
 
     def forward(self, input, labels, attention_mask=None):
         emb = self.embeddings(input)
+        emb = nn.utils.rnn.pack_padded_sequence(emb, lengths=attention_mask.sum(-1).cpu(), batch_first=True, enforce_sorted=False)
         hid = self.bilstm(emb)[0]
+        hid = nn.utils.rnn.pad_packed_sequence(hid, batch_first=True)[0]
         first_hid = hid[:, 0]
 
         logits = self.classifier(first_hid)
@@ -41,8 +44,9 @@ if __name__ == "__main__":
     parser.add_argument('--train_examples', type=int, default=1000)
     parser.add_argument('--test_examples', type=int, default=10000)
     parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('--chunk_size', type=int, default=1)
     parser.add_argument('--vocab_size', type=int, default=100)
-    parser.add_argument('--steps', type=int, default=10000)
+    parser.add_argument('--steps', type=int, default=100000)
     parser.add_argument('--eval_every', type=int, default=100)
 
     parser.add_argument('--train_seqlen', type=int, default=300)
@@ -74,14 +78,19 @@ if __name__ == "__main__":
 
     dataset = FindCatDataset(seed=args.seed, total_examples=args.train_examples, seqlen=args.train_seqlen)
     dev_dataset = FindCatDataset(seed=314, total_examples=args.test_examples, seqlen=args.test_seqlen)
+
+    dataset = SpanChunkDataset(dataset, FindCatSentence, chunk_size=args.chunk_size)
+    dev_dataset = SpanChunkDataset(dev_dataset, FindCatSentence, chunk_size=args.chunk_size)
+
     validation_fn = find_cat_validation_fn if args.validate_examples else lambda ex: True
 
     random.seed(args.seed)
+    np.random.seed(args.seed)
     sdrop_dataset = SentenceDropDataset(dataset, sent_drop_prob=args.sent_dropout,
         example_validate_fn=validation_fn, beta_drop=args.beta_drop, beta_drop_scale=args.beta_drop_scale)
 
     if args.sent_dropout > 0:
-        failed, total = sdrop_dataset.estimate_label_noise(reps=10, validation_fn=find_cat_validation_fn)
+        failed, total = sdrop_dataset.estimate_label_noise(reps=max(1, 10000 // len(dataset)), validation_fn=find_cat_validation_fn)
         print(f"Label noise: {failed / total * 100 :6.3f}% ({failed:7d} / {total:7d})", flush=True)
     else:
         print(f"Label noise: 0% (- / -)", flush=True)
@@ -103,7 +112,7 @@ if __name__ == "__main__":
             batch = {k: batch[k].cuda() for k in batch}
             step += 1
             input = batch['input'].clamp(min=0)
-            attn_mask = (input >= 0)
+            attn_mask = (batch['input'] > 0)
             output = model(input, attention_mask=attn_mask, labels=batch['labels'])
 
             total_loss += output.loss.item()
@@ -129,7 +138,7 @@ if __name__ == "__main__":
                     for batch in dev_dataloader:
                         batch = {k: batch[k].cuda() for k in batch}
                         input = batch['input'].clamp(min=0)
-                        attn_mask = (input >= 0)
+                        attn_mask = (batch['input'] > 0)
                         output = model(input, attention_mask=attn_mask, labels=batch['labels'])
                         pred = output.logits.max(1)[1]
 
