@@ -44,7 +44,7 @@ class SpanChunkDataset(Dataset):
 
         new_ex = deepcopy(ex)
         new_ex.tokenized_sentences = new_spans
-        return new_ex        
+        return new_ex
 
     def __getitem__(self, key):
         ex = self.dataset[key]

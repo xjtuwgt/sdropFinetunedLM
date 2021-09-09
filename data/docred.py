@@ -260,7 +260,7 @@ def docred_validate_fn(example):
     return example.head_entity in example.entities
 
 if __name__ == "__main__":
-    dataset = DocREDDataset("/Users/peng.qi/Downloads/dev.json")
+    dataset = DocREDDataset("dataset/docred/dev.json")
     sdrop_dataset = SentenceDropDataset(dataset, sent_drop_prob=.1, 
         sent_drop_postproc=docred_sent_drop_postproc, 
         example_validate_fn=lambda ex: ex.head_entity in ex.entities)
