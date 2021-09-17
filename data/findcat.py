@@ -122,7 +122,7 @@ class FindCatDataset(TokenizedDataset):
                 assert len(self.fixed_positions) == len(target_tokens)
                 positions = self.fixed_positions
             else:
-                positions = sorted(random.choices(list(range(self.seqlen)), k=len(target_tokens)))
+                positions = sorted(random.sample(list(range(self.seqlen)), k=len(target_tokens)))
 
             for p_i, p in enumerate(positions):
                 retval[p] = target_tokens[p_i]
